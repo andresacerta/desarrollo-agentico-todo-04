@@ -8,6 +8,7 @@ name = "tres tareas"
       id = "<%= uuid() %>"
       title = "Comprar material de oficina"
       completed = false
+      position = 1
       created_at = "<%= now() %>"
       updated_at = "<%= now() %>"
 
@@ -15,6 +16,7 @@ name = "tres tareas"
       id = "<%= uuid() %>"
       title = "Llamar al gestor"
       completed = false
+      position = 2
       created_at = "<%= now() %>"
       updated_at = "<%= now() %>"
 
@@ -22,5 +24,6 @@ name = "tres tareas"
       id = "<%= uuid() %>"
       title = "Publicar la oferta de empleo"
       completed = true
+      position = 3
       created_at = "<%= now() %>"
       updated_at = "<%= now() %>"

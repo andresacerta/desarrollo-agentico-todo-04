@@ -237,3 +237,115 @@ func (as *ActionSuite) Test_TasksUpdate_InvalidID() {
 	res := as.HTML("/tasks/no-es-un-uuid").Put(url.Values{"title": {"Título nuevo"}})
 	as.Equal(404, res.Code)
 }
+
+func (as *ActionSuite) createTask(title string) *models.Task {
+	task := &models.Task{Title: title}
+	verrs, err := as.DB.ValidateAndCreate(task)
+	as.NoError(err)
+	as.False(verrs.HasAny())
+	return task
+}
+
+// assertOrder comprueba que los títulos aparecen en el cuerpo en el orden indicado.
+func (as *ActionSuite) assertOrder(body string, titles ...string) {
+	previous := -1
+	for _, title := range titles {
+		index := strings.Index(body, title)
+		as.Greater(index, previous, "%q no aparece en el orden esperado", title)
+		previous = index
+	}
+}
+
+func (as *ActionSuite) indexBody() string {
+	res := as.HTML("/").Get()
+	as.Equal(200, res.Code)
+	return res.Body.String()
+}
+
+func (as *ActionSuite) Test_TasksIndex_OrdersByPosition() {
+	first := as.createTask("Primera tarea")
+	second := as.createTask("Segunda tarea")
+	third := as.createTask("Tercera tarea")
+	positions := map[*models.Task]int{third: 1, first: 2, second: 3}
+	for task, position := range positions {
+		as.NoError(as.DB.RawQuery("UPDATE tasks SET position = ? WHERE id = ?", position, task.ID).Exec())
+	}
+
+	as.assertOrder(as.indexBody(), "Tercera tarea", "Primera tarea", "Segunda tarea")
+}
+
+func (as *ActionSuite) Test_TasksMove_PersistsOrder() {
+	as.createTask("Primera tarea")
+	as.createTask("Segunda tarea")
+	third := as.createTask("Tercera tarea")
+
+	res := as.JSON("/tasks/%s/move", third.ID).Put(map[string]interface{}{"position": 1})
+	as.Equal(200, res.Code)
+	as.Contains(res.Body.String(), `"position":1`)
+
+	as.assertOrder(as.indexBody(), "Tercera tarea", "Primera tarea", "Segunda tarea")
+}
+
+func (as *ActionSuite) Test_TasksMove_ClampsBeyondEnd() {
+	first := as.createTask("Primera tarea")
+	as.createTask("Segunda tarea")
+	as.createTask("Tercera tarea")
+
+	res := as.JSON("/tasks/%s/move", first.ID).Put(map[string]interface{}{"position": 99})
+	as.Equal(200, res.Code)
+	as.Contains(res.Body.String(), `"position":3`)
+
+	as.assertOrder(as.indexBody(), "Segunda tarea", "Tercera tarea", "Primera tarea")
+}
+
+func (as *ActionSuite) Test_TasksMove_InvalidPosition() {
+	as.createTask("Primera tarea")
+	as.createTask("Segunda tarea")
+	third := as.createTask("Tercera tarea")
+
+	bodies := []map[string]interface{}{
+		{"position": 0},
+		{},
+		{"position": "abc"},
+	}
+	for _, body := range bodies {
+		res := as.JSON("/tasks/%s/move", third.ID).Put(body)
+		as.Equal(422, res.Code, "cuerpo %v", body)
+		as.Contains(res.Body.String(), "La posición debe ser un número entero mayor que cero.")
+	}
+
+	as.assertOrder(as.indexBody(), "Primera tarea", "Segunda tarea", "Tercera tarea")
+}
+
+func (as *ActionSuite) Test_TasksMove_NotFound() {
+	res := as.JSON("/tasks/%s/move", uuid.Must(uuid.NewV4())).Put(map[string]interface{}{"position": 1})
+	as.Equal(404, res.Code)
+}
+
+func (as *ActionSuite) Test_TasksMove_InvalidID() {
+	res := as.JSON("/tasks/no-es-un-uuid/move").Put(map[string]interface{}{"position": 1})
+	as.Equal(404, res.Code)
+}
+
+func (as *ActionSuite) Test_TasksCreate_AppendsAtEndAfterReorder() {
+	as.createTask("Primera tarea")
+	second := as.createTask("Segunda tarea")
+
+	res := as.JSON("/tasks/%s/move", second.ID).Put(map[string]interface{}{"position": 1})
+	as.Equal(200, res.Code)
+
+	created := as.HTML("/tasks").Post(&models.Task{Title: "Tercera tarea"})
+	as.Equal(303, created.Code)
+
+	as.assertOrder(as.indexBody(), "Segunda tarea", "Primera tarea", "Tercera tarea")
+}
+
+func (as *ActionSuite) Test_TasksIndex_RendersReorderHandle() {
+	task := as.createTask("Primera tarea")
+
+	body := as.indexBody()
+	as.Contains(body, "data-reorder-handle")
+	as.Contains(body, "Mover tarea: Primera tarea")
+	as.Contains(body, `data-move-url="/tasks/`+task.ID.String()+`/move"`)
+	as.Contains(body, "data-reorder-token")
+}
