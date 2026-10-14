@@ -121,7 +121,7 @@ h1 {
 
 .task {
   display: grid;
-  grid-template-columns: 32px 44px minmax(0, 1fr) auto;
+  grid-template-columns: 28px 44px minmax(0, 1fr) auto;
   align-items: start;
   column-gap: 0.3rem;
   min-height: 61px;
@@ -161,20 +161,23 @@ h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  min-height: 44px;
+  align-self: center;
+  width: 28px;
+  height: 36px;
   padding: 0;
-  color: var(--color-muted);
+  color: #a3a39d;
   background: transparent;
   border: 0;
   border-radius: 6px;
   cursor: grab;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 120ms ease, background-color 120ms ease, opacity 120ms ease;
 }
 
 .task-handle svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 .task-handle:hover {
@@ -182,18 +185,57 @@ h1 {
   background: #f2f2ee;
 }
 
+.task-handle:focus-visible {
+  color: var(--color-text);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
 .task-list-dragging,
 .task-list-dragging * {
-  cursor: grabbing;
+  cursor: grabbing !important;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .task-dragging {
   position: relative;
-  z-index: 1;
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(40, 40, 38, 0.14), 0 0 0 1px var(--color-border);
-  transform: scale(1.01);
+  z-index: 2;
+  border-bottom-color: transparent;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(40, 40, 38, 0.16), 0 2px 6px rgba(40, 40, 38, 0.08), 0 0 0 1px var(--color-border);
+  scale: 1.015;
+  transition: scale 150ms ease, box-shadow 150ms ease;
+  will-change: transform;
+}
+
+.task-dragging .task-handle {
+  color: var(--color-text);
+  background: #f2f2ee;
+  opacity: 1;
+}
+
+.task-dragging .task-actions {
+  visibility: hidden;
+}
+
+.task-settling {
+  position: relative;
+  z-index: 2;
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes task-saved {
+  from {
+    background-color: #f7e9e4;
+  }
+  to {
+    background-color: #ffffff;
+  }
+}
+
+.task-saved {
+  animation: task-saved 900ms ease-out;
 }
 
 .completion-icon {
@@ -444,8 +486,7 @@ input:focus-visible {
   }
 
   .task-handle {
-    opacity: 0.45;
-    transition: opacity 120ms ease;
+    opacity: 0.55;
   }
 
   .task:hover .task-handle,
@@ -485,11 +526,11 @@ input:focus-visible {
   }
 
   .task {
-    grid-template-columns: 28px 36px minmax(0, 1fr) auto;
+    grid-template-columns: 24px 36px minmax(0, 1fr) auto;
   }
 
   .task-handle {
-    width: 28px;
+    width: 24px;
   }
 
   .task-toggle-button,

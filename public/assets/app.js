@@ -92,7 +92,7 @@ document.addEventListener("submit", function (event) {
       if (delta) {
         el.animate(
           [{ transform: "translateY(" + delta + "px)" }, { transform: "none" }],
-          { duration: 150, easing: "ease-out" }
+          { duration: 200, easing: "cubic-bezier(0.2, 0, 0, 1)" }
         );
       }
     });
@@ -138,6 +138,7 @@ document.addEventListener("submit", function (event) {
           throw new Error("HTTP " + response.status);
         }
         clearError();
+        flashSaved(task);
         statusBox.textContent = title + ": posición " + position + " de " + total + ".";
       })
       .catch(function () {
@@ -146,19 +147,87 @@ document.addEventListener("submit", function (event) {
       });
   }
 
+  // Distancia mínima antes de empezar a arrastrar: así un clic en el asa no mueve nada.
+  var DRAG_THRESHOLD = 4;
+
+  // Posición vertical de la tarea sin el desplazamiento que le aplicamos al arrastrarla.
+  function naturalTop(task) {
+    var transform = task.style.transform;
+    task.style.transform = "";
+    var top = task.getBoundingClientRect().top;
+    task.style.transform = transform;
+    return top;
+  }
+
+  // Mantiene la tarea pegada al puntero aunque ya haya cambiado de sitio en la lista.
+  function follow(clientY) {
+    var offset = clientY - drag.grabOffset - naturalTop(drag.task);
+    drag.task.style.transform = "translateY(" + offset + "px)";
+  }
+
+  function targetIndex(clientY) {
+    var others = items().filter(function (el) {
+      return el !== drag.task;
+    });
+    var center = clientY - drag.grabOffset + drag.height / 2;
+    for (var i = 0; i < others.length; i++) {
+      var rect = others[i].getBoundingClientRect();
+      if (center < rect.top + rect.height / 2) {
+        return i;
+      }
+    }
+    return others.length;
+  }
+
+  function startDrag() {
+    drag.active = true;
+    drag.task.classList.add("task-dragging");
+    list.classList.add("task-list-dragging");
+    clearError();
+  }
+
+  // Devuelve la tarea a su hueco con una transición corta en vez de un salto.
+  function settle(task) {
+    task.classList.remove("task-dragging");
+    if (reduceMotion.matches || !task.style.transform) {
+      task.style.transform = "";
+      return;
+    }
+    task.classList.add("task-settling");
+    // Fuerza el estilo actual para que la transición parta de la posición arrastrada.
+    task.getBoundingClientRect();
+    task.style.transform = "";
+    window.setTimeout(function () {
+      task.classList.remove("task-settling");
+    }, 200);
+  }
+
+  function flashSaved(task) {
+    if (reduceMotion.matches) {
+      return;
+    }
+    task.classList.remove("task-saved");
+    task.getBoundingClientRect();
+    task.classList.add("task-saved");
+  }
+
   function endDrag(cancelled) {
     if (!drag) {
       return;
     }
     var current = drag;
     drag = null;
-    current.task.classList.remove("task-dragging");
     list.classList.remove("task-list-dragging");
+    if (!current.active) {
+      return;
+    }
 
     if (cancelled) {
       moveTo(current.task, current.start);
+      settle(current.task);
       return;
     }
+    settle(current.task);
     if (indexOf(current.task) !== current.start) {
       persist(current.task, current.start);
     }
@@ -166,21 +235,34 @@ document.addEventListener("submit", function (event) {
 
   list.addEventListener("pointerdown", function (event) {
     var handle = event.target.closest("[data-reorder-handle]");
-    if (!handle || event.button !== 0) {
+    if (!handle || event.button !== 0 || items().length < 2) {
       return;
     }
     event.preventDefault();
     handle.setPointerCapture(event.pointerId);
     var task = handle.closest(".task");
-    drag = { task: task, start: indexOf(task) };
-    task.classList.add("task-dragging");
-    list.classList.add("task-list-dragging");
+    var rect = task.getBoundingClientRect();
+    drag = {
+      task: task,
+      start: indexOf(task),
+      startY: event.clientY,
+      grabOffset: event.clientY - rect.top,
+      height: rect.height,
+      active: false,
+    };
   });
 
   list.addEventListener("pointermove", function (event) {
     if (!drag) {
       return;
     }
+    if (!drag.active) {
+      if (Math.abs(event.clientY - drag.startY) < DRAG_THRESHOLD) {
+        return;
+      }
+      startDrag();
+    }
+
     // Desplaza la página cuando el puntero se acerca a los bordes.
     if (event.clientY < 48) {
       window.scrollBy(0, -12);
@@ -188,20 +270,11 @@ document.addEventListener("submit", function (event) {
       window.scrollBy(0, 12);
     }
 
-    var others = items().filter(function (el) {
-      return el !== drag.task;
-    });
-    var index = others.length;
-    for (var i = 0; i < others.length; i++) {
-      var rect = others[i].getBoundingClientRect();
-      if (event.clientY < rect.top + rect.height / 2) {
-        index = i;
-        break;
-      }
-    }
+    var index = targetIndex(event.clientY);
     if (index !== indexOf(drag.task)) {
       moveTo(drag.task, index);
     }
+    follow(event.clientY);
   });
 
   list.addEventListener("pointerup", function () {
