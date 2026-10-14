@@ -1,0 +1,3 @@
+add_column("tasks", "position", "integer", {"default": 0})
+sql("UPDATE tasks SET position = ordered.row_number FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC) AS row_number FROM tasks) AS ordered WHERE tasks.id = ordered.id")
+add_index("tasks", "position", {})

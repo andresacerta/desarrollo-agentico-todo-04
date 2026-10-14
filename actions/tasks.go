@@ -16,7 +16,7 @@ func TasksIndex(c buffalo.Context) error {
 	tx := c.Value("tx").(*pop.Connection)
 
 	tasks := models.Tasks{}
-	if err := tx.Order("created_at asc, id asc").All(&tasks); err != nil {
+	if err := tx.Order(models.TaskOrder).All(&tasks); err != nil {
 		return err
 	}
 
@@ -43,7 +43,7 @@ func TasksCreate(c buffalo.Context) error {
 
 	if verrs.HasAny() {
 		tasks := models.Tasks{}
-		if err := tx.Order("created_at asc, id asc").All(&tasks); err != nil {
+		if err := tx.Order(models.TaskOrder).All(&tasks); err != nil {
 			return err
 		}
 
@@ -117,6 +117,34 @@ func TasksToggle(c buffalo.Context) error {
 	}
 
 	return c.Redirect(http.StatusSeeOther, "/")
+}
+
+// TasksMove cambia la posición de una tarea en la lista y responde en JSON.
+func TasksMove(c buffalo.Context) error {
+	tx := c.Value("tx").(*pop.Connection)
+
+	task := &models.Task{}
+	if err := tx.Find(task, c.Param("task_id")); err != nil {
+		return c.Error(http.StatusNotFound, err)
+	}
+
+	input := struct {
+		Position int `form:"position" json:"position"`
+	}{}
+	if err := c.Bind(&input); err != nil || input.Position < 1 {
+		return c.Render(http.StatusUnprocessableEntity, r.JSON(map[string]string{
+			"error": "La posición debe ser un número entero mayor que cero.",
+		}))
+	}
+
+	if err := task.MoveTo(tx, input.Position); err != nil {
+		return err
+	}
+
+	return c.Render(http.StatusOK, r.JSON(map[string]interface{}{
+		"id":       task.ID,
+		"position": task.Position,
+	}))
 }
 
 // TasksDestroy elimina una tarea.
